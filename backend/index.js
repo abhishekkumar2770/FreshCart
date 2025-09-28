@@ -23,9 +23,7 @@ app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(cookieParser());
 app.use(express.json());
 
-app.get("/", (req, res) => {
-  res.send("Backend is running!");
-});
+app.get("/", (req, res) => res.send("Backend is running!"));
 
 // Api endpoints
 app.use("/images", express.static("uploads"));
