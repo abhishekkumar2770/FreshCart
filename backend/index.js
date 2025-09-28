@@ -43,8 +43,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
-import { connectDB } from "./config/connectDB.js";
-import { connectCloudinary } from "./config/cloudinary.js";
+import mongoose from "mongoose";
 
 import userRoutes from "./routes/user.routes.js";
 import sellerRoutes from "./routes/seller.routes.js";
@@ -58,31 +57,7 @@ dotenv.config();
 const app = express();
 
 // --------------------
-// Initialize services
-// --------------------
-let servicesInitialized = false;
-async function initServices() {
-  if (!servicesInitialized) {
-    await connectCloudinary();
-    await connectDB();
-    servicesInitialized = true;
-    console.log("✅ Services initialized (MongoDB + Cloudinary)");
-  }
-}
-
-// Middleware to ensure services are initialized before any request
-app.use(async (req, res, next) => {
-  try {
-    await initServices();
-    next();
-  } catch (err) {
-    console.error("❌ Service initialization failed:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// --------------------
-// Middlewares
+// Middleware
 // --------------------
 const allowedOrigins = ["http://localhost:5173", process.env.FRONTEND_URL || ""];
 app.use(cors({ origin: allowedOrigins, credentials: true }));
@@ -90,10 +65,35 @@ app.use(cookieParser());
 app.use(express.json());
 
 // --------------------
+// DB connection helper (for serverless)
+// --------------------
+let isDBConnected = false;
+async function connectDB() {
+  if (!isDBConnected) {
+    if (!process.env.MONGO_URI) throw new Error("MONGO_URI missing in env");
+    await mongoose.connect(process.env.MONGO_URI);
+    isDBConnected = true;
+    console.log("✅ MongoDB connected");
+  }
+}
+
+// --------------------
+// Route wrapper to ensure DB
+// --------------------
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error("❌ DB connection error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// --------------------
 // Routes
 // --------------------
 app.get("/", (req, res) => res.send("✅ Backend is running!"));
-app.use("/images", express.static("uploads"));
 app.use("/api/user", userRoutes);
 app.use("/api/seller", sellerRoutes);
 app.use("/api/product", productRoutes);
@@ -107,11 +107,9 @@ app.use("/api/order", orderRoutes);
 export default app;
 
 // --------------------
-// Local dev: start server
+// Local dev
 // --------------------
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running at http://localhost:${PORT}`);
-  });
+  app.listen(PORT, () => console.log(`🚀 Server running at http://localhost:${PORT}`));
 }
